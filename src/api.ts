@@ -10,8 +10,14 @@ export async function api<T>(action:string,data:Record<string,unknown>={}):Promi
  if(!supabase)throw new Error('Koneksi Supabase belum dikonfigurasi.');
  const {data:session}=await supabase.auth.getSession();
  if(!session.session)throw new Error(messages.AUTH_REQUIRED);
- const response=await fetch(functionUrl,{method:'POST',headers:{'Content-Type':'application/json',apikey:key,Authorization:`Bearer ${session.session.access_token}`},body:JSON.stringify({action,data})});
- const body=await response.json();if(!response.ok)throw new Error(messages[body.error]||`Permintaan belum berhasil (${body.error||response.status}).`);return body.data;
+ let response:Response;
+ try{response=await fetch(functionUrl,{method:'POST',headers:{'Content-Type':'application/json',apikey:key,Authorization:`Bearer ${session.session.access_token}`},body:JSON.stringify({action,data})});}
+ catch{throw new Error('Tidak dapat menghubungi server. Periksa koneksi internet dan alamat function backend.');}
+ const text=await response.text();let body:{error?:string;data?:unknown}={};
+ try{body=text?JSON.parse(text) as {error?:string;data?:unknown}:{};}catch{body={};}
+ if(!response.ok)throw new Error((body.error&&messages[body.error])||`Permintaan belum berhasil (${body.error||response.status}).`);
+ if(!('data'in body))throw new Error('Balasan server tidak dikenali. Periksa alamat Edge Function cat-api dan daftar ALLOWED_ORIGINS.');
+ return body.data as T;
 }
 export const writer=crypto.randomUUID();
 export function remaining(expires:string,server:string,anchor:number,now=performance.now()){return Math.max(0,Math.ceil((Date.parse(expires)-Date.parse(server)-(now-anchor))/1000));}
